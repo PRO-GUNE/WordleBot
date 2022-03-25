@@ -1,11 +1,11 @@
 #python3
 # This program simulates a number of wordle of games with the wordle bot
 
-from wordlebot import runWordleBot, readFile
+from wordlebot import generateGuess, readFile, getMatchingWords
 from itertools import product
 from random import randint
-from copy import copy
-from time import perf_counter, time_ns
+from time import perf_counter
+from sys import argv
 
 def genFeedback(word, guess):
     move = []
@@ -29,23 +29,21 @@ def genFeedback(word, guess):
 
     return move_str
 
-def simulate(filename:str, tests:int, wordleBot, initial_guess:str="tares")->list:
+def simulate(all_filename:str, allowed_filename:str, initial_guess:str="tares")->list:
     '''
         Simulate a number of tests with the given wordle bot
     '''
     # Get the word list from the file
-    rawwords = readFile(filename)
+    allowed = readFile(allowed_filename)
     # A list to store all the guesses made
     all_guesses = []
     # A list to store all the possible arrangements
     arrangements = [''.join(arr) for arr in product("RYG", repeat=5)]
     
     # Run all the tests to generate a solution 
-    for j in range(tests):
+    for j,word in enumerate(allowed):
         # Make a copy of the raw word list
-        words = copy(rawwords)
-        # Generate a random word
-        word = words[randint(0,len(words)-1)]
+        words = readFile(all_filename)
 
         last_guess = initial_guess
         guesses = []
@@ -61,14 +59,15 @@ def simulate(filename:str, tests:int, wordleBot, initial_guess:str="tares")->lis
                 print(f"Solved {last_guess}")
                 break
             # Generate a new guess using the feedback received
-            last_guess = wordleBot(words, arrangements, last_guess, feedback_str)
+            words = getMatchingWords(last_guess, words, feedback_str)
+            last_guess = generateGuess(words, arrangements)
 
         else:
             print(f"Bot took too many guesses :| Answer was {word}")
             guesses = None
 
         # Guesses will be None if the bot failed to guess correctly
-        print(f"\r{j+1} Tests run out of {tests}")
+        print(f"\r{j+1} Tests run")
         all_guesses.append(guesses)
     
         print()
@@ -76,12 +75,12 @@ def simulate(filename:str, tests:int, wordleBot, initial_guess:str="tares")->lis
 
 if __name__=="__main__":
     start = perf_counter()
-    all_guesses = simulate('./wordle.txt', 5, runWordleBot)
+    all_guesses = simulate('./wordle.txt', './allowed.txt')
     end = perf_counter()
 
     # Calculate efficiency
     time_taken = end - start
-    print("Average time taken: ", 10/time_taken)
+    print("Time taken per word: ",time_taken)
 
     # Success rate
     successes = list(filter(lambda x: x is not None, all_guesses))

@@ -2,7 +2,7 @@
 # This module contains the helper functions for the wordle bot
 from math import log2
 from itertools import product
-from copy import copy
+from re import match
 
 def generateGuess(words, arrangements)->str:
     '''
@@ -30,92 +30,106 @@ def expectedInfoValue(words:list, arrangements:list, word: str) -> float:
         Calculates the expected information value given a word
     '''
     info_values = []
+    size = len(words)
     # Calculate the different expected information values for different arrangements
     for arrangement in arrangements:
-        copy_words = copy(words)
-        probability = calculateInfoValue(word, copy_words, arrangement)
-        value = probability*log2(1/probability) if probability else probability
+        matching = getMatchingWords(word, words, arrangement)
+        value = calculateInfoValue(size, len(matching))
         info_values.append(value)
     
     # Return the expected value for the word
     expected_value = sum(info_values)
     return expected_value
 
+def calculateInfoValue(size:int, matching_size:int)->float:
+    '''
+        Calculates the information value
+    '''
+    probability = matching_size/size
+    value = -log2(probability) if probability else 0
 
-def calculateInfoValue(last_guess:str, words:list, feedback_str:str) -> float:
+    return value
+
+
+def getMatchingWords(last_guess:str, words:list, feedback_str:str) -> float:
     '''
         Calculates the information (bits) for a given the feedback string
-        The Feedback string is used to update the words list
     '''
-    num_words = len(words)
-    initial_num_words = num_words
+    matching = []
     
-    for j, (char, state) in enumerate(zip(last_guess, feedback_str)):
-        # If the character is present and in the correct position
-        if state in "RY":
-            i=0
-            while(i<num_words):
-                if char not in words[i]:
-                    words.pop(i)
-                    num_words-=1
-                else:
-                    i+=1
+    for word in words:
 
-        if state=="R":
-            i=0
-            while(i<num_words):
-                if words[i][j]!=char:
-                    words.pop(i)
-                    num_words-=1
+        if isValid(last_guess, feedback_str, word):
+            matching.append(word)
 
-                else:
-                    i+=1
-            # If the character is present but in the wrong place
-        elif state=="Y":
-            i=0
-            while(i<num_words):
-                if words[i][j]==char:
-                    words.pop(i)
-                    num_words-=1
+    return matching
 
-                else:
-                    i+=1
-        
-    for char, state in zip(last_guess, feedback_str):
-        if state=="G":
-            i=0
-            while(i<num_words):
-                if shouldRemove(words[i], char, feedback_str):
-                    words.pop(i)
-                    num_words-=1
-
-                else:
-                    i+=1
-        
-    # Calculate the probability
-    probability = num_words/initial_num_words
-    return probability
-
-def shouldRemove(word, letter, feedback_str):
+def genRegex(last_guess:str, feedback_str:str) -> str:
     '''
-        Checks if given letter has a Y or R value anywhere in the feedback string
+        Generate a regex string using the last guess and the feedback
     '''
-    letters = [x for x in word]
+    # list of tokens to merge to get the final regex string
+    regex_tokens = []
 
-    # Remove the R positions from the word
-    size = len(feedback_str)
-    i,j=0,0
-    while j<size:
-        if feedback_str[j]=="R":
-            letters.pop(i)
-        else:
-            i+=1
-        j+=1
+    # The token for letters not in the word
+    G_letters = set()
+    Y_letters = set()
+    for l,f in zip(last_guess, feedback_str):
+        if f=="G":
+            G_letters.add(l)
+        elif f=="Y":
+            Y_letters.add(l)
 
-    if letter in letters:
+    # Check if copies exist in pairs i.e. the two sets are equal
+    G_letters = list(G_letters - Y_letters)
+
+    if not G_letters:
+        for l,f in zip(last_guess, feedback_str):
+            # If the letter is in the right position
+            if f=='R':
+                regex_tokens.append(l)
+            elif f=='Y':
+                regex_tokens.append(f'[^{l}]')
+            elif f=="G":
+                regex_tokens.append('[a-z]')
+
+    else:    
+        # If no copies are present
+        G_string = ''.join(G_letters)
+
+        for l,f in zip(last_guess, feedback_str):
+            # If the letter is in the right position
+            if f=='R':
+                regex_tokens.append(l)
+            elif f=='Y':
+                regex_tokens.append(f'[^{l}{G_string}]')
+            elif f=="G":
+                regex_tokens.append(f'[^{G_string}]')
+    
+    regex = ''.join(regex_tokens)
+    return regex
+
+def isValid(last_guess:str, feedback_str:str, word:str):
+    '''
+        Checks if the given string is a valid match
+    '''
+    # Generate the regex string
+    regex = genRegex(last_guess, feedback_str)
+
+    if match(regex, word):
+        # Letters that should be present in the word
+        Y_letters = [l for l,f in zip(last_guess, feedback_str) if f=="Y"]
+        for letter in Y_letters:
+            if letter not in word:
+                return False
+
+        # word has all characters that should be present
         return True
-
+    
+    # Word does not match the regex
     return False
+
+
 
 # Function to read the word list
 def readFile(filename:str) -> list:
@@ -123,46 +137,41 @@ def readFile(filename:str) -> list:
         words = [x.strip() for x in f.readlines()]
     return words
 
-def runWordleBot(words:list, arrangements:list, last_guess:str, feedback_str:str)->str:
+def runWordleBot(input=input)->list:
     '''
         Combines the necessary functions to execute the bot
     '''
-
-    if feedback_str=="RRRRR":
-        return None
-
-    # Update the words list in the bot
-    probability = calculateInfoValue(last_guess, words, feedback_str)
-    info_value = -log2(probability) if probability else 0
-    print(f"Information Value of the Guess {round(info_value,2)} bits", )
-    print("Number of words", len(words))        
-
-    # Calculate the best guess
-    last_guess = generateGuess(words, arrangements)
-    return last_guess
-
-    
-
-def main() -> None:
     words = readFile('./wordle.txt')
     arrangements = [''.join(arr) for arr in product("RYG", repeat=5)]
     last_guess = "tares"
-    
-    print("Number of words", len(words))
+
+    guesses = []
 
     for i in range(5):
+        # Get Feedback on last guess
         feedback_str = input("Feedback String: ")
-        guess = runWordleBot(words, arrangements, last_guess, feedback_str)
-
-        print(words)
-
-        if not guess:
+            
+        # Check if guessed correctly    
+        if feedback_str=="RRRRR":
             print(f"Success :{last_guess}")
             break
-        else:
-            last_guess=guess
-            print(guess)
+
+        # Update the words list in the bot
+        size = len(words)
+        words = getMatchingWords(last_guess, words, feedback_str)
+        info_value = calculateInfoValue(size, len(words))
+        print(f"Information Value of the Guess {round(info_value,2)} bits")        
+
+        # Calculate the best guess
+        last_guess = generateGuess(words, arrangements)
+        print(f"Next Guess: {last_guess}")
+        guesses.append(last_guess)
+
+    else:
+        print(f"Bot Failed :| on {last_guess}")
+    
+    return guesses
 
 
 if __name__=="__main__":
-    main()
+    runWordleBot()

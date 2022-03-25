@@ -52,12 +52,12 @@ def interactiveUI():
     welcomeMsg()
 
     # All the possible words
-    with open('./wordle.txt') as f:
+    with open('./allowed.txt') as f:
         words = [x.strip() for x in f.readlines()]
 
     # Select a word at random
     # word = words[rd.randint(0,len(words)-1)]
-    word = 'hebes'
+    word = 'eight'
     guesses = 6
     moves = []
 
