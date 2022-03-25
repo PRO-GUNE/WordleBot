@@ -2,7 +2,6 @@
 # This module contains the helper functions for the wordle bot
 from math import log2
 from itertools import product
-from re import match
 
 def generateGuess(words, arrangements)->str:
     '''
@@ -51,85 +50,37 @@ def calculateInfoValue(size:int, matching_size:int)->float:
     return value
 
 
-def getMatchingWords(last_guess:str, words:list, feedback_str:str) -> float:
+def getMatchingWords(last_guess:str, words:list, feedback_str:str) -> set:
     '''
         Calculates the information (bits) for a given the feedback string
     '''
-    matching = []
+    possible_words = set(words)
+    contains_only_elsewhere = set()
+    must_not_contain = set()
+    exact_letter_match = set()
     
-    for word in words:
-
-        if isValid(last_guess, feedback_str, word):
-            matching.append(word)
-
-    return matching
-
-def genRegex(last_guess:str, feedback_str:str) -> str:
-    '''
-        Generate a regex string using the last guess and the feedback
-    '''
-    # list of tokens to merge to get the final regex string
-    regex_tokens = []
-
-    # The token for letters not in the word
-    G_letters = set()
-    Y_letters = set()
-    for l,f in zip(last_guess, feedback_str):
-        if f=="G":
-            G_letters.add(l)
-        elif f=="Y":
-            Y_letters.add(l)
-
-    # Check if copies exist in pairs i.e. the two sets are equal
-    G_letters = list(G_letters - Y_letters)
-
-    if not G_letters:
-        for l,f in zip(last_guess, feedback_str):
-            # If the letter is in the right position
-            if f=='R':
-                regex_tokens.append(l)
-            elif f=='Y':
-                regex_tokens.append(f'[^{l}]')
-            elif f=="G":
-                regex_tokens.append('[a-z]')
-
-    else:    
-        # If no copies are present
-        G_string = ''.join(G_letters)
-
-        for l,f in zip(last_guess, feedback_str):
-            # If the letter is in the right position
-            if f=='R':
-                regex_tokens.append(l)
-            elif f=='Y':
-                regex_tokens.append(f'[^{l}{G_string}]')
-            elif f=="G":
-                regex_tokens.append(f'[^{G_string}]')
+    for i, (letter,state) in enumerate(zip(last_guess, feedback_str)):
+        # letter is present but not in the correct position
+        if state=="Y":
+            contains_only_elsewhere.update({word for word in possible_words if 
+                                            letter not in word or word[i]==letter})
+        
+        # letter is present and in the correct position
+        elif state=="R":
+            exact_letter_match.update({word for word in possible_words if 
+                                        letter!=word[i]})
+        
+        # letter is not present in the word
+        else:
+            must_not_contain.update({word for word in possible_words if
+                                        letter==word[i]})
     
-    regex = ''.join(regex_tokens)
-    return regex
+    # remove unwanted words from the possible set of words
+    possible_words -= contains_only_elsewhere
+    possible_words -= must_not_contain
+    possible_words -= exact_letter_match
 
-def isValid(last_guess:str, feedback_str:str, word:str):
-    '''
-        Checks if the given string is a valid match
-    '''
-    # Generate the regex string
-    regex = genRegex(last_guess, feedback_str)
-
-    if match(regex, word):
-        # Letters that should be present in the word
-        Y_letters = [l for l,f in zip(last_guess, feedback_str) if f=="Y"]
-        for letter in Y_letters:
-            if letter not in word:
-                return False
-
-        # word has all characters that should be present
-        return True
-    
-    # Word does not match the regex
-    return False
-
-
+    return possible_words
 
 # Function to read the word list
 def readFile(filename:str) -> list:
