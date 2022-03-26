@@ -3,19 +3,19 @@
 from math import log2
 from itertools import product
 from re import match
+from csv import DictReader
 
-def generateGuess(words, arrangements)->str:
+def generateGuess(words:list, freq_list:dict)->str:
     '''
         Generates a guess after performing necessary calculations
     '''
     guesses = []
     num_words = len(words)
-    if not num_words:
-        return None
 
     # Get the guesses and calculate their expected values
     for i, word in enumerate(words):
-        guesses.append((word, expectedInfoValue(words, arrangements, word)))
+        probability = freq_list.get(word) if freq_list.get(word) else 0
+        guesses.append((word, probability))
         print(f"\r{i+1} of {num_words} checked", end='')
     
     print()
@@ -25,30 +25,23 @@ def generateGuess(words, arrangements)->str:
     return guesses[0][0]
     
 
-def expectedInfoValue(words:list, arrangements:list, word: str) -> float:
+def uncertainity(words:list, freq_list:dict) -> float:
     '''
         Calculates the expected information value given a word
     '''
-    info_values = []
-    size = len(words)
     # Calculate the different expected information values for different arrangements
-    for arrangement in arrangements:
-        matching = getMatchingWords(word, words, arrangement)
-        value = calculateInfoValue(size, len(matching))
-        info_values.append(value)
+    value = 0.0
+    for word in words:
+        value += calculateInfoValue(word, freq_list)
     
     # Return the expected value for the word
-    expected_value = sum(info_values)
-    return expected_value
+    return value
 
-def calculateInfoValue(size:int, matching_size:int)->float:
+def calculateInfoValue(word:str, freq_list:dict, )->float:
     '''
         Calculates the information value
     '''
-    probability = matching_size/size
-    value = -log2(probability) if probability else 0
-
-    return value
+    return freq_list.get(word)*log2(1/freq_list.get(word)) if freq_list.get(word) else 0
 
 
 def getMatchingWords(last_guess:str, words:list, feedback_str:str) -> float:
@@ -137,12 +130,21 @@ def readFile(filename:str) -> list:
         words = [x.strip() for x in f.readlines()]
     return words
 
+def readFileDict(filename:str) -> dict:
+    with open(filename, newline='') as f:
+        data = DictReader(f)
+        words = {}
+        for row in data:
+            words[row['word']] = float(row['probability'])
+
+    return words
+
 def runWordleBot(input=input)->list:
     '''
         Combines the necessary functions to execute the bot
     '''
     words = readFile('./wordle.txt')
-    arrangements = [''.join(arr) for arr in product("RYG", repeat=5)]
+    freq_list = readFileDict('./5-gram_freq.csv')
     last_guess = "tares"
 
     guesses = []
@@ -157,13 +159,12 @@ def runWordleBot(input=input)->list:
             break
 
         # Update the words list in the bot
-        size = len(words)
         words = getMatchingWords(last_guess, words, feedback_str)
-        info_value = calculateInfoValue(size, len(words))
-        print(f"Information Value of the Guess {round(info_value,2)} bits")        
+        info_value = uncertainity(words, freq_list)
+        print(f"Remaining Uncertainity: {info_value}")      
 
         # Calculate the best guess
-        last_guess = generateGuess(words, arrangements)
+        last_guess = generateGuess(words, freq_list)
         print(f"Next Guess: {last_guess}")
         guesses.append(last_guess)
 

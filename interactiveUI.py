@@ -56,8 +56,7 @@ def interactiveUI():
         words = [x.strip() for x in f.readlines()]
 
     # Select a word at random
-    # word = words[rd.randint(0,len(words)-1)]
-    word = 'eight'
+    word = words[rd.randint(0,len(words)-1)]
     guesses = 6
     moves = []
 
