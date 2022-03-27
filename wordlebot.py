@@ -5,24 +5,48 @@ from itertools import product
 from re import match
 from csv import DictReader
 
-def generateGuess(words:list, freq_list:dict)->str:
+def generateGuess(words:list, 
+                freq_list:dict, 
+                arrangements:list, 
+                uncertainity:float, 
+                current_score:int
+            ) -> str:
     '''
         Generates a guess after performing necessary calculations
     '''
     guesses = []
-    num_words = len(words)
-
-    # Get the guesses and calculate their expected values
-    for i, word in enumerate(words):
-        probability = freq_list.get(word) if freq_list.get(word) else 0
-        guesses.append((word, probability))
-        print(f"\r{i+1} of {num_words} checked", end='')
     
-    print()
+
+    # Get the guesses and calculate the overall probability of their possible matches
+    for i, word in enumerate(words):
+        expectedValues = []
+
+        # If the word is not likely to occur i.e. not in the frequency data, skip that word
+        if not freq_list.get(word):
+            continue
+
+        for arrangement in arrangements:
+            matching = getMatchingWords(word, words, arrangement)
+        
+            # Calculate the overall probability of the matching words
+            probability = 0
+            for word in matching:
+                probability += freq_list.get(word) if freq_list.get(word) else 0
+            
+            # Add to the expected values list
+            value = probability*log2(1/probability) if probability else 0
+            expectedValues.append(value)
+        
+        # If the word is not probable then no need to consider its score
+        if freq_list.get(word):
+            score = freq_list.get(word)*current_score + (1-freq_list.get(word))*(uncertainity-current_score)
+            # Add the word to the list
+            guesses.append((word, score))
+        
     # Sort the guesses by their expected values
     guesses.sort(key=lambda x:x[1], reverse=True)
 
-    return guesses[0][0]
+    return guesses[0][0] if guesses else None
     
 
 def uncertainity(words:list, freq_list:dict) -> float:
@@ -32,17 +56,10 @@ def uncertainity(words:list, freq_list:dict) -> float:
     # Calculate the different expected information values for different arrangements
     value = 0.0
     for word in words:
-        value += calculateInfoValue(word, freq_list)
+        value += freq_list.get(word)*log2(1/freq_list.get(word)) if freq_list.get(word) else 0
     
     # Return the expected value for the word
     return value
-
-def calculateInfoValue(word:str, freq_list:dict, )->float:
-    '''
-        Calculates the information value
-    '''
-    return freq_list.get(word)*log2(1/freq_list.get(word)) if freq_list.get(word) else 0
-
 
 def getMatchingWords(last_guess:str, words:list, feedback_str:str) -> float:
     '''
@@ -139,40 +156,73 @@ def readFileDict(filename:str) -> dict:
 
     return words
 
-def runWordleBot(input=input)->list:
+def wordleBot(words:list,               # The list of possible words    
+            freq_list:list,             # The frequency list data
+            arrangements:list,          # All possible feedback strings 
+            current_score:int=1,        # Current score of the game
+            last_guess:str=None,        # The previous guess made and passed down to the function
+            feedback_str:str=None,      # The Feedback given for the last guess
+            simulate:bool=False,        # Simulation Mode is ON or off
+            simulate_data:dict=None     # If simualtion mode is ON, then this dictionary should
+                                        # carry the input function with the parameters, word and last_guess
+                                        # and the correct word
+            ) -> list:
+    '''
+        The Logic of the wordle bot using all the helper functions
+    '''
+    # Check if guessed correctly
+    if feedback_str=="RRRRR":
+        return None
+
+    # Calculate the best guess
+    current_uncertainity = uncertainity(words, freq_list)
+    last_guess = generateGuess(words, freq_list, arrangements, current_uncertainity, current_score)
+
+    # Get Feedback on last guess
+    if simulate:
+        input_func = simulate_data['input']
+        feedback_str = input_func(word=simulate_data['word'], guess=last_guess)
+    else:
+        print("Next Guess: ", last_guess)
+        feedback_str = input("Feedback String: ")
+
+    # Update the words list in the bot
+    words = getMatchingWords(last_guess, words, feedback_str)
+
+    # Recursive call down the next function
+    next_guess = wordleBot(words, freq_list, arrangements, current_score+1, last_guess, feedback_str, simulate, simulate_data)
+    
+    # Check if the recursion has reached the answer
+    if isinstance(next_guess, list):
+        newlist = [last_guess]
+        newlist.extend(next_guess)
+        return newlist
+    elif next_guess:
+        return [last_guess, next_guess]
+            
+    return last_guess
+
+def main()->list:
     '''
         Combines the necessary functions to execute the bot
     '''
     words = readFile('./wordle.txt')
     freq_list = readFileDict('./5-gram_freq.csv')
-    last_guess = "tares"
+    arramgements = product("RYG", repeat=5)
 
-    guesses = []
+    guesses = wordleBot(words, freq_list, arramgements)
 
-    for i in range(5):
-        # Get Feedback on last guess
-        feedback_str = input("Feedback String: ")
-            
-        # Check if guessed correctly    
-        if feedback_str=="RRRRR":
-            print(f"Success :{last_guess}")
-            break
+    print(guesses)
 
-        # Update the words list in the bot
-        words = getMatchingWords(last_guess, words, feedback_str)
-        info_value = uncertainity(words, freq_list)
-        print(f"Remaining Uncertainity: {info_value}")      
+def welcomeMsg():
+    print(f"\033[92m{' Wordle BOT 🤖'.center(90,'=')}\033[0m")
+    print(">>\t\033[42mA\033[0m --> A is in the word and is in the correct position\t<<")
+    print(">>\t\033[43mA\033[0m --> A is in the word but is in an incorrect position\t<<")
+    print(">>\t\033[100mA\033[0m --> A is not in the word\t\t\t\t<<")
+    print(f"\033[1;92m{' Guess the word '.center(90,'=')}\033[0m")
 
-        # Calculate the best guess
-        last_guess = generateGuess(words, freq_list)
-        print(f"Next Guess: {last_guess}")
-        guesses.append(last_guess)
-
-    else:
-        print(f"Bot Failed :| on {last_guess}")
-    
-    return guesses
 
 
 if __name__=="__main__":
-    runWordleBot()
+    welcomeMsg()
+    main()
