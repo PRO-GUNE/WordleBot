@@ -186,8 +186,11 @@ def wordleBot(words:list,               # The list of possible words
         print("Next Guess: ", last_guess)
         feedback_str = input("Feedback String: ")
 
-    # Update the words list in the bot
-    words = getMatchingWords(last_guess, words, feedback_str)
+    # Update the words list in the bot if a valid last guess is made
+    if last_guess:
+        words = getMatchingWords(last_guess, words, feedback_str)
+    else:
+        return None
 
     # Recursive call down the next function
     next_guess = wordleBot(words, freq_list, arrangements, current_score+1, last_guess, feedback_str, simulate, simulate_data)
